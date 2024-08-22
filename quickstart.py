@@ -63,7 +63,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     Trains the model.
 
     '''
-    best_combined_score = -np.Inf  # Best weighted model score.
+    best_combined_score = -np.inf  # Best weighted model score.
 
     loss_ce_functions = {chart: get_loss(train_options['chart_loss'][chart]['type'], chart=chart, **train_options['chart_loss'][chart])
                          for chart in train_options['charts']}
@@ -96,7 +96,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             batch_x = batch_x.to(device, non_blocking=True)
 
             # - Mixed precision training. (Saving memory)
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 # - Forward pass.
                 output = net(batch_x)
                 # breakpoint()
@@ -106,8 +106,9 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                     if train_options['edge_consistency_loss'] != 0:
                         edge_consistency_loss = loss_water_edge_consistency(output)
 
-                    cross_entropy_loss += weight * loss_ce_functions[chart](
-                        output[chart], batch_y[chart].to(device))
+                    if weight != 0:
+                        cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart], batch_y[chart].to(device))
 
             if train_options['edge_consistency_loss'] != 0:
                 a = train_options['edge_consistency_loss']
@@ -163,7 +164,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             val_edge_consistency_loss = torch.tensor([0.]).to(device)
             val_cross_entropy_loss = torch.tensor([0.]).to(device)
             # - Ensures that no gradients are calculated, which otherwise take up a lot of space on the GPU.
-            with torch.no_grad(), torch.cuda.amp.autocast():
+            with torch.no_grad(), torch.amp.autocast('cuda'):
                 inf_x = inf_x.to(device, non_blocking=True)
                 if train_options['model_selection'] == 'swin':
                     output = slide_inference(inf_x, net, train_options, 'val')
@@ -347,14 +348,14 @@ def main():
         print(colour_str('GPU available!', 'green'))
         print('Total number of available devices: ',
               colour_str(torch.cuda.device_count(), 'orange'))
-        
+
         # Check if NVIDIA V100, A100, or H100 is available for torch compile speed up
         if train_options['compile_model']:
             gpu_ok = False
             device_cap = torch.cuda.get_device_capability()
             if device_cap in ((7, 0), (8, 0), (9, 0)):
                 gpu_ok = True
-            
+
             if not gpu_ok:
                 warnings.warn(
                     colour_str("GPU is not NVIDIA V100, A100, or H100. Speedup numbers may be lower than expected.", 'red')
@@ -387,11 +388,14 @@ def main():
     # initialize wandb run
 
     if not train_options['cross_val_run']:
-        wandb.init(name=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
-                   entity="ai4arctic", config=train_options, id=id, resume="allow")
+        #wandb.init(name=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
+        #           entity="ai4arctic", config=train_options, id=id, resume="allow")
+        wandb.init(project=args.wandb_project, config=train_options, id=id, resume="allow")
+
     else:
-        wandb.init(name=osp.splitext(osp.basename(args.config))[0]+'-'+run_name, group=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
-                   entity="ai4arctic", config=train_options, id=id, resume="allow")
+        #wandb.init(name=osp.splitext(osp.basename(args.config))[0]+'-'+run_name, group=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
+        #           entity="ai4arctic", config=train_options, id=id, resume="allow")
+        wandb.init(project=args.wandb_project, config=train_options, id=id, resume="allow")
 
     # Define the metrics and make them such that they are not added to the summary
     wandb.define_metric("Train Epoch Loss", summary="none")
