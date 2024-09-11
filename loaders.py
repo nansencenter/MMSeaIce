@@ -49,16 +49,30 @@ class AI4ArcticChallengeDataset(Dataset):
             self.aux = []
             # self.files = self.files[:30]
             for file in tqdm(self.files):
-                scene = xr.open_dataset(os.path.join(
-                    self.options['path_to_train_data'], file), engine='h5netcdf')
+                try:
+                    scene = xr.open_dataset(os.path.join(self.options['path_to_train_data'], file), engine='h5netcdf')
+                except Exception as inst:
+                    print(file)    # the exception type
+                    print(type(inst))    # the exception type
+                    print(inst.args)     # arguments stored in .args
+                    print(inst)
+                    continue
 
-                temp_scene = scene[self.options['full_variables']].to_array()
+                try:
+                    temp_scene = scene[self.options['full_variables']].to_array()
+                except Exception as inst:
+                    print(file)    # the exception type
+                    print(type(inst))    # the exception type
+                    print(inst.args)     # arguments stored in .args
+                    print(inst)
+                    continue
+
                 temp_scene = torch.from_numpy(np.expand_dims(temp_scene, 0))
                 temp_scene = torch.nn.functional.interpolate(temp_scene,
                                                              size=(temp_scene.size(2)//self.options['down_sample_scale'],
                                                                    temp_scene.size(3)//self.options['down_sample_scale']),
                                                              mode=self.options['loader_downsampling'])
-                
+
                 scene_size_before_padding = temp_scene.shape
 
                 if temp_scene.size(2) < self.options['patch_size']:
@@ -308,7 +322,7 @@ class AI4ArcticChallengeDataset(Dataset):
         Parameters
         ----------
         idx :
-            Index from self.files to parse 
+            Index from self.files to parse
 
         Returns
         -------
@@ -342,7 +356,7 @@ class AI4ArcticChallengeDataset(Dataset):
         # - Discard patches with too many meaningless pixels (optional).
         if np.sum(self.scenes[idx][0, row_rand: row_rand + self.options['patch_size'],
                                    col_rand: col_rand + self.options['patch_size']].numpy()
-                  != self.options['class_fill_values']['SIC']) > 1:
+                  != self.options['class_fill_values']['SIC']) > 100:
 
             # Crop full resolution variables.
             patch[0:len(self.options['full_variables']), :, :] = \
@@ -354,7 +368,7 @@ class AI4ArcticChallengeDataset(Dataset):
                                                            int(amsrenv_row): int(amsrenv_row + np.ceil(self.options['amsrenv_patch'])),
                                                            int(amsrenv_col): int(amsrenv_col + np.ceil(self.options['amsrenv_patch']))]
                                            ).unsqueeze(0)
-                # Add padding in case the patch size return is smaller than the expected one. 
+                # Add padding in case the patch size return is smaller than the expected one.
                 if amsrenv.size(2) < self.options['amsrenv_patch']:
                     height_pad = int(np.ceil(self.options['amsrenv_patch'])) - amsrenv.size(2)
                 else:
@@ -379,7 +393,7 @@ class AI4ArcticChallengeDataset(Dataset):
                     int(np.around(amsrenv_col_index_crop)): int(np.around
                                                                 (amsrenv_col_index_crop
                                                                  + self.options['patch_size']))]
-                
+
                 patch[len(self.options['full_variables']):len(self.options['full_variables']) +
                       len(self.options['amsrenv_variables']):, :, :] = amsrenv.numpy()
 
@@ -429,7 +443,7 @@ class AI4ArcticChallengeDataset(Dataset):
             y[chart] = y_patches[:, idx].type(torch.long)
 
         return x, y
-    
+
     def transform(self, x_patch, y_patch):
         data_aug_options = self.options['data_augmentations']
         if torch.rand(1) < data_aug_options['Random_h_flip']:
@@ -463,7 +477,7 @@ class AI4ArcticChallengeDataset(Dataset):
                             shear=0, scale=random_scale, fill=0)
         y_patch = TF.affine(y_patch, angle=random_degree, translate=(0, 0),
                             shear=0, scale=random_scale, fill=255)
-        
+
         return x_patch, y_patch
 
     def __getitem__(self, idx):
@@ -516,8 +530,12 @@ class AI4ArcticChallengeDataset(Dataset):
 
             if x_patch is not None:
                 if self.do_transform:
-                    x_patch, y_patch = self.transform(x_patch, y_patch)
-                    
+                    try:
+                        x_patch, y_patch = self.transform(x_patch, y_patch)
+                    except:
+                        print('Error with self.transform.')
+                        continue
+
                 # -- Stack the scene patches in patches
                 x_patches[sample_n, :, :, :] = x_patch
                 y_patches[sample_n, :, :, :] = y_patch
@@ -651,7 +669,7 @@ class AI4ArcticChallengeTestDataset(Dataset):
             x = torch.nn.functional.interpolate(
                 x, scale_factor=1/self.options['down_sample_scale'], mode=self.options['loader_downsampling'])
 
-        # TODO: 
+        # TODO:
         if self.mode != 'test_no_gt':
             y_charts = torch.from_numpy(scene[self.options['charts']].isel().to_array().values).unsqueeze(0)
             y_charts = torch.nn.functional.interpolate(
@@ -727,7 +745,7 @@ def get_variable_options(train_options: dict):
         Updated with amsrenv options.
         Updated with correct true patch size
     """
-    
+
     train_options['amsrenv_delta'] = train_options['amsrenv_pixel_spacing'] / \
         (train_options['pixel_spacing']*train_options['down_sample_scale'])
 

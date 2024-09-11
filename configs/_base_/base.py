@@ -150,17 +150,17 @@ train_options = {
     # Down Sampling scale (If it is by 2 the image will get downsample by 2)
     'down_sample_scale': 1,
     'task_weights': [1, 1, 1],
-    
+
     # p leave out cross val run
     'cross_val_run': False,
     'p-out': 20,
     'compute_classwise_f1score': False,
     'plot_confusion_matrix': False,
 
-    # If true it compiles the model. This will increase the speed of the model for training and inference. 
+    # If true it compiles the model. This will increase the speed of the model for training and inference.
     # Needs Pytorch 2 to work.
     'compile_model': False,
-    
+
     # ensemble after softmax?
     # 'ensemble_after_softmax': True,
     # TODO: Speak with Muhammed different quickstart.py should have different configs.
