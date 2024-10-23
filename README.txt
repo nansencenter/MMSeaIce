@@ -32,8 +32,10 @@ How much random rotation affects training
 3. Reduce number of scenes (filter by delta T) and train two models. Check effect of delta T. If strong, preproc of data from 2021 should be done. Done.
 
 4. Increase and decrease SIR footprint (update loader) and train two models. If has effect, increase / decrease even more; train. Use the best footprint further.
+Done. Unclear. Oversmapling of one class has higher effect.
 
-5. Train _01d, _01e for checking effect of subsampling and more AMSR2 bands on SIC, SOD, FLOE
+5. Train _01d, _01e for checking effect of subsampling and more AMSR2 bands on SIC, SOD, FLOE.
+Done. Unclear. Oversmapling of one class has higher effect.
 
 6. Exclude some classes (update loader) and train two models. If helps, think how to limit data and preproc.
 
