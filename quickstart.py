@@ -11,20 +11,20 @@ import random
 import os
 import os.path as osp
 import shutil
-from icecream import ic
+from icecream import ic # type: ignore
 import pathlib
 import warnings
 
-import numpy as np
-import torch
-from mmcv import Config, mkdir_or_exist
+import numpy as np # type: ignore
+import torch # type: ignore
+from mmcv import Config, mkdir_or_exist # type: ignore
 from tqdm import tqdm  # Progress bar
 
 import wandb
 # Functions to calculate metrics and show the relevant chart colorbar.
 from functions import compute_metrics, save_best_model, load_model, slide_inference, \
     batched_slide_inference, water_edge_metric, class_decider, create_train_validation_and_test_scene_list, \
-    get_scheduler, get_optimizer, get_loss, get_model
+    get_scheduler, get_optimizer, get_loss, get_model, save_epoch_model
 
 # Load consutme loss function
 from losses import WaterConsistencyLoss
@@ -108,8 +108,10 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                     #    edge_consistency_loss = loss_water_edge_consistency(output)
 
                     if weight != 0:
-                        cross_entropy_loss += weight * loss_ce_functions[chart](
-                            output[chart], batch_y[chart].to(device))
+                        _loss = loss_ce_functions[chart](output[chart], batch_y[chart].to(device))
+                        #if torch.isnan(_loss):
+                        #    import ipdb; ipdb.set_trace()
+                        cross_entropy_loss += weight * _loss
 
             #if train_options['edge_consistency_loss'] != 0:
             #    a = train_options['edge_consistency_loss']
@@ -174,9 +176,18 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                     output = net(inf_x)
 
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-
-                    val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
-                                                                                inf_y[chart].unsqueeze(0).long().to(device))
+                    # SIR
+                    if 'SIR' in train_options['charts'][0]:
+                        val_cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart][:,:,~cfv_masks[chart]],
+                            inf_y[chart][~cfv_masks[chart]].unsqueeze(0).long().to(device)
+                        )
+                    else:
+                        # SIC, SOD, FLZ
+                        val_cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart],
+                            inf_y[chart].unsqueeze(0).long().to(device)
+                        )
 
                 #if train_options['edge_consistency_loss'] != 0:
                 #    a = train_options['edge_consistency_loss']
@@ -187,12 +198,9 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             # - Final output layer, and storing of non masked pixels.
             for chart in train_options['charts']:
                 output[chart] = class_decider(output[chart], train_options, chart)
-                # output[chart] = torch.argmax(
-                #     output[chart], dim=1).squeeze()
                 outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart][~cfv_masks[chart]]))
-                outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], output[chart][~tfv_mask]))
-                inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y[chart]
-                                                [~cfv_masks[chart]].to(device, non_blocking=True)))
+                #outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], output[chart][~tfv_mask]))
+                inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y[chart][~cfv_masks[chart]].to(device, non_blocking=True)))
             # - Add batch loss.
             val_loss_sum += val_loss_batch.detach().item()
             val_cross_entropy_loss_sum += val_cross_entropy_loss.detach().item()
@@ -267,6 +275,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             model_path = save_best_model(cfg, train_options, net, optimizer, scheduler, epoch)
 
             wandb.save(model_path)
+        save_epoch_model(cfg, train_options, net, optimizer, scheduler, epoch)
 
     del inf_ys_flat, outputs_flat  # Free memory.
     return model_path

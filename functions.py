@@ -18,6 +18,7 @@ import json
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 import torch
 import torch.utils.data as data
 # from sklearn.metrics import r2_score, f1_score
@@ -101,7 +102,7 @@ def r2_metric(true, pred, num_classes=None):
         ndarray, 1d contains all predicted pixels. Must by numpy array.
     num_classes :
         Num of classes in the dataset, this value is not used in this function but used in f1_metric function
-        which requires num_classes argument. The reason it was included here was to keep the same structure.  
+        which requires num_classes argument. The reason it was included here was to keep the same structure.
 
 
     Returns
@@ -235,6 +236,43 @@ def save_best_model(cfg, train_options: dict, net, optimizer, scheduler, epoch: 
 
     return os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth')
 
+def save_epoch_model(cfg, train_options: dict, net, optimizer, scheduler, epoch: int):
+    '''
+    Saves the input model in the inside the directory "/work_dirs/"experiment_name"/
+    The models with be save as best_model.pth.
+    The following are stored inside best_model.pth
+        model_state_dict
+        optimizer_state_dict
+        epoch
+        train_options
+
+
+    Parameters
+    ----------
+    cfg : mmcv.Config
+        The config file object of mmcv
+    train_options : Dict
+        The dictory which stores the train_options from quickstart
+    net :
+        The pytorch model
+    optimizer :
+        The optimizer that the model uses.
+    epoch: int
+        The epoch number
+
+    '''
+    print('saving model....')
+    config_file_name = os.path.basename(cfg.work_dir)
+    model_filename = f'{cfg.work_dir}/best_model_{config_file_name}_{epoch:05}.pth'
+    torch.save(obj={'model_state_dict': net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'epoch': epoch,
+                    'train_options': train_options
+                    },
+               f=model_filename)
+    print(f"model saved successfully at {model_filename}")
+
 
 def load_model(net, checkpoint_path, optimizer=None, scheduler=None):
     """
@@ -260,7 +298,7 @@ def load_model(net, checkpoint_path, optimizer=None, scheduler=None):
 
 def rand_bbox(size, lam):
     '''
-    Given the 4D dimensions of a batch (size), and the ratio 
+    Given the 4D dimensions of a batch (size), and the ratio
     of the spatial dimension (lam) to be cut, returns a bounding box coordinates
     used for cutmix
 
@@ -269,7 +307,7 @@ def rand_bbox(size, lam):
     size : 4D shape of the batch (N, C, H, W)
     lam : Ratio (portion) of the input to be cutmix'd
 
-    Returns 
+    Returns
     ----------
     Bounding box (x1, y1, x2, y2)
     '''
@@ -299,11 +337,11 @@ def slide_inference(img, net, options, mode):
     Parameters
     ----------
     img : 4D shape of the batch (N, C', H, W)
-    net : PyTorch model of nn.Module 
+    net : PyTorch model of nn.Module
     options: configuration dictionary
     mode: either 'val' or 'test'
 
-    Returns 
+    Returns
     ----------
     pred: Dictionary with SIC, SOD, and FLOE predictions of the batch  (N, C", H, W)
     """
@@ -434,11 +472,11 @@ def batched_slide_inference(img, net, options, mode):
     Parameters
     ----------
     img : 4D shape of the batch (N, C', H, W)
-    net : PyTorch model of nn.Module 
+    net : PyTorch model of nn.Module
     y_type: str, One of 'SIC', 'SOD', or 'FLOE'
     options: configuration dictionary
 
-    Returns 
+    Returns
     ----------
     pred: Dictionary with SIC, SOD, and FLOE predictions of the batch  (N, C", H, W)
     """
@@ -560,7 +598,20 @@ def compute_classwise_f1score(true, pred, charts, num_classes):
                                 task='multiclass', num_classes=num_classes[chart])
     return score
 
+def create_train_validation_and_test_scene_list(train_options):
+    '''
+    Creates the a train and validation scene list. Adds these two list to the config file train_options
 
+    '''
+    with open(train_options['train_list_path']) as f:
+        train_options['train_list'] = json.load(f)
+
+    with open(train_options['val_path']) as f:
+        train_options['validate_list'] = json.load(f)
+
+    print('Options train_list and validate_list initialised')
+
+"""
 def create_train_validation_and_test_scene_list(train_options):
     '''
     Creates the a train and validation scene list. Adds these two list to the config file train_options
@@ -591,14 +642,14 @@ def create_train_validation_and_test_scene_list(train_options):
     # Remove the validation scenes from the train list.
     train_options['train_list'] = [scene for scene in train_options['train_list']
                                    if scene not in train_options['validate_list']]
-    
+
     # Test ----------
     with open(train_options['path_to_env'] + train_options['test_path']) as file:
         train_options['test_list'] = json.loads(file.read())
         train_options['test_list'] = [file[17:32] + '_' + file[77:80] + '_prep.nc'
                                       for file in train_options['test_list']]
     print('Options initialised')
-
+"""
 
 def get_scheduler(train_options, optimizer):
     if train_options['scheduler']['type'] == 'CosineAnnealingLR':
@@ -727,6 +778,40 @@ def get_model(train_options, device):
     elif train_options['model_selection'] in ['UNet_sep_dec_mse']:
         from unet import UNet_sep_dec_mse
         net = UNet_sep_dec_mse(options=train_options).to(device)
+    elif train_options['model_selection'] in ['unet_regression_sir']:
+        from unet import UNet_regression_SIR
+        net = UNet_regression_SIR(options=train_options).to(device)
     else:
         raise 'Unknown model selected'
     return net
+
+def fill_gaps(inp, mask=None, distance=5):
+    """
+    Fill gaps in input array with nearest neighbor values
+
+    Parameters
+    ----------
+    inp : 2D numpy.array
+        Array with gaps
+    mask : 2D numpy.array
+        Mask of gaps
+    distance : int
+        Minimum distance to gap border to fill
+    Returns
+
+    -------
+    outp : 2D numpy.array
+        Array with gaps filled
+    """
+
+    if mask is None:
+        mask = np.isnan(inp)
+    outp = np.array(inp)
+    dist, indi = distance_transform_edt(
+        mask,
+        return_distances=True,
+        return_indices=True)
+    gpi = dist <= distance
+    r,c = indi[:,gpi]
+    outp[gpi] = inp[r,c]
+    return outp

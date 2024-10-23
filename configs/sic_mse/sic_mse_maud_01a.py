@@ -64,17 +64,17 @@ train_options = {
     'num_workers': 0,  # Number of parallel processes to fetch data.
     'num_workers_val': 0,  # Number of parallel processes during validation.
     'patch_size': 256,
-    'down_sample_scale': 10,
+    'down_sample_scale': 5,
 
     'data_augmentations': {
         'Random_h_flip': 0.5,
         'Random_v_flip': 0.5,
         'Random_rotation_prob': 0.5,
         'Random_rotation': 90,
-        'Random_scale_prob': 0.5,
-        'Random_scale': (0.9, 1.1),
+        'Random_scale_prob': 0.,
+        'Random_scale': (1., 1.),
         'Cutmix_beta': 1.0,
-        'Cutmix_prob': 0.5,
+        'Cutmix_prob': 0.,
     },
     # -- Model selection -- #
     'model_selection': 'unet_regression',  # Either 'swin' or 'unet

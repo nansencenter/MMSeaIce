@@ -24,9 +24,10 @@ import torch
 import xarray as xr
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
+from scipy.ndimage import maximum_filter, minimum_filter
 
 # -- Proprietary modules -- #
-from functions import rand_bbox
+from functions import rand_bbox, fill_gaps
 
 class AI4ArcticChallengeDataset(Dataset):
     """Pytorch dataset for loading batches of patches of scenes from the ASID
@@ -38,10 +39,11 @@ class AI4ArcticChallengeDataset(Dataset):
         self.do_transform = do_transform
 
         # If Downscaling, down sample data and put in on memory
-        if (self.options['down_sample_scale'] == 1):
-            self.downsample = False
-        else:
-            self.downsample = True
+        #if (self.options['down_sample_scale'] == 1):
+        #    self.downsample = False
+        #else:
+        #    self.downsample = True
+        self.downsample = True
 
         if self.downsample:
             self.scenes = []
@@ -59,13 +61,27 @@ class AI4ArcticChallengeDataset(Dataset):
                     continue
 
                 try:
-                    temp_scene = scene[self.options['full_variables']].to_array()
+                    temp_scene = scene[self.options['full_variables']].to_array().to_numpy()
                 except Exception as inst:
                     print(file)    # the exception type
                     print(type(inst))    # the exception type
                     print(inst.args)     # arguments stored in .args
                     print(inst)
                     continue
+
+                if 'mask_classes' in self.options:
+                    for i, key in enumerate(self.options['full_variables']):
+                        if key in self.options['mask_classes']:
+                            temp_scene[i] = np.where(temp_scene[i] == self.options['mask_classes'][key], 255, temp_scene[i])
+
+                if 'change_SIR_footprint' in self.options:
+                    mask = temp_scene[0] == 255
+                    if self.options['change_SIR_footprint'] < 0:
+                        mask = maximum_filter(mask, size=-self.options['change_SIR_footprint'])
+                        temp_scene[0, mask] = 255
+                    else:
+                        temp_scene[0] = fill_gaps(temp_scene[0], mask, self.options['change_SIR_footprint'])
+
 
                 temp_scene = torch.from_numpy(np.expand_dims(temp_scene, 0))
                 temp_scene = torch.nn.functional.interpolate(temp_scene,
@@ -354,9 +370,16 @@ class AI4ArcticChallengeDataset(Dataset):
         amsrenv_col_index_crop = amsrenv_col_dec * self.options['amsrenv_delta'] * amsrenv_col_dec
 
         # - Discard patches with too many meaningless pixels (optional).
-        if np.sum(self.scenes[idx][0, row_rand: row_rand + self.options['patch_size'],
+        if 'mask_for_cropping' in self.options:
+            mask_var_index = self.options['mask_for_cropping']['index']
+            mask_var_chart = self.options['mask_for_cropping']['chart']
+        else:
+            mask_var_index = 0
+            mask_var_chart = 'SIC'
+
+        if np.sum(self.scenes[idx][mask_var_index, row_rand: row_rand + self.options['patch_size'],
                                    col_rand: col_rand + self.options['patch_size']].numpy()
-                  != self.options['class_fill_values']['SIC']) > 100:
+                  != self.options['class_fill_values'][mask_var_chart]) > 100:
 
             # Crop full resolution variables.
             patch[0:len(self.options['full_variables']), :, :] = \
@@ -568,6 +591,14 @@ class AI4ArcticChallengeTestDataset(Dataset):
             raise ValueError("String variable must be one of 'train', 'test', or 'test_no_gt'")
         self.mode = mode
 
+        self.data = []
+        for i, ifile in enumerate(tqdm(self.files)):
+            x, y, cfv_masks, tfv_mask, name, original_size = self._getitem_old(i)
+            self.data.append([x, y, cfv_masks, tfv_mask, name, original_size])
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
     def __len__(self):
         """
         Provide the number of iterations. Function required by Pytorch dataset.
@@ -688,7 +719,7 @@ class AI4ArcticChallengeTestDataset(Dataset):
 
         return x.float(), y
 
-    def __getitem__(self, idx):
+    def _getitem_old(self, idx):
         """
         Get scene. Function required by Pytorch dataset.
 
@@ -718,7 +749,11 @@ class AI4ArcticChallengeTestDataset(Dataset):
             cfv_masks = {}
             for chart in self.options['charts']:
                 cfv_masks[chart] = (
-                    y[chart] == self.options['class_fill_values'][chart]).squeeze()
+                    (y[chart] == self.options['class_fill_values'][chart]) +
+                    (y[chart] >= self.options['n_classes'][chart]))
+                if 'mask_classes' in self.options and chart in self.options['mask_classes']:
+                    cfv_masks[chart] += np.isin(y[chart], self.options['mask_classes'][chart])
+                cfv_masks[chart] = cfv_masks[chart].squeeze()
         else:
             cfv_masks = None
 
