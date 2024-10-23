@@ -163,3 +163,12 @@ __pycache__/functions.cpython-39.pyc
 best_model
 # filename.pickle
 
+*.log
+*.json
+conf_matrs_png/
+new_to_train
+new_to_train2
+ready_to_train
+ready_to_train2
+results
+workdir_0*
