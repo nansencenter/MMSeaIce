@@ -166,9 +166,8 @@ best_model
 *.log
 *.json
 conf_matrs_png/
-new_to_train
-new_to_train2
-ready_to_train
-ready_to_train2
+new_to_trai*
+ready_to_trai*
 results
 workdir_0*
+sir_*

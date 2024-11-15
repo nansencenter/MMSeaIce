@@ -10,11 +10,11 @@ __version__ = '1.0.0'
 __date__ = '2024-04-05'
 
 # -- File info -- #
-from torchvision.models.resnet import BasicBlock
-from torch import nn
-from torchvision import models
+from torchvision.models.resnet import BasicBlock # type: ignore
+from torch import nn # type: ignore
+from torchvision import models # type: ignore
 # -- Third-party modules -- #
-import torch
+import torch # type: ignore
 
 
 class UNet(torch.nn.Module):
@@ -47,10 +47,9 @@ class UNet(torch.nn.Module):
                                                      input_n=options['unet_conv_filters'][expand_n - 1],
                                                      output_n=options['unet_conv_filters'][expand_n - 2]))
 
-        self.sic_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['SIC'])
-        self.sod_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['SOD'])
-        self.floe_feature_map = FeatureMap(
-            input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['FLOE'])
+        #self.sic_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['SIC'])
+        #self.sod_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['SOD'])
+        #self.floe_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['FLOE'])
 
     def forward(self, x):
         """Forward model pass."""
@@ -739,5 +738,29 @@ class UNet_SIR_RFS_MSS(torch.nn.Module):
 
         return {
             chart: self.get_submodule(f'output_{chart}')(x_expand)
+            for chart in self.charts
+        }
+
+class UNet_regression_SIR_IS2(UNet):
+    def __init__(self, options):
+        super().__init__(options)
+        self.charts = options['charts']
+        for chart in self.charts:
+            self.add_module(f'output_{chart}', torch.nn.Linear(options['unet_conv_filters'][0], 1))
+
+    def forward(self, x):
+        """Forward model pass."""
+        x_contract = [self.input_block(x)]
+        for contract_block in self.contract_blocks:
+            x_contract.append(contract_block(x_contract[-1]))
+
+        x_expand = self.bridge(x_contract[-1])
+        up_idx = len(x_contract)
+        for expand_block in self.expand_blocks:
+            x_expand = expand_block(x_expand, x_contract[up_idx - 1])
+            up_idx -= 1
+
+        return {
+            chart: self.get_submodule(f'output_{chart}')(x_expand.permute(0, 2, 3, 1))
             for chart in self.charts
         }

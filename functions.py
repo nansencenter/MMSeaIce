@@ -15,15 +15,15 @@ __date__ = '2024-04-05'
 import os
 import json
 # -- Third-party modules -- #
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import numpy as np
-from scipy.ndimage import distance_transform_edt
-import torch
-import torch.utils.data as data
+import matplotlib as mpl # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+import numpy as np # type: ignore
+from scipy.ndimage import distance_transform_edt # type: ignore
+import torch # type: ignore
+import torch.utils.data as data # type: ignore
 # from sklearn.metrics import r2_score, f1_score
-from torchmetrics.functional import r2_score, f1_score
-import segmentation_models_pytorch as smp
+from torchmetrics.functional import r2_score, f1_score # type: ignore
+import segmentation_models_pytorch as smp # type: ignore
 from tqdm import tqdm  # Progress bar
 # -- Proprietary modules -- #
 
@@ -274,7 +274,7 @@ def save_epoch_model(cfg, train_options: dict, net, optimizer, scheduler, epoch:
     print(f"model saved successfully at {model_filename}")
 
 
-def load_model(net, checkpoint_path, optimizer=None, scheduler=None):
+def load_model(net, checkpoint_path, optimizer=None, scheduler=None, name_mapping=None, device='cuda'):
     """
     Loads a PyTorch model from a checkpoint file and returns the model, optimizer, and scheduler.
     :param model: PyTorch model to load
@@ -284,8 +284,23 @@ def load_model(net, checkpoint_path, optimizer=None, scheduler=None):
     :return: If optimizer and scheduler are provided, return the model, optimizer, and scheduler.
     """
 
-    checkpoint = torch.load(checkpoint_path)
-    net.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = torch.load(checkpoint_path, map_location=torch.device(device))
+    model_state_dict = checkpoint['model_state_dict']
+    if name_mapping is not None:
+        new_model_state_dict = {}
+        for k, v in model_state_dict.items():
+            renamed = False
+            for src_name, dst_name in name_mapping.items():
+                if src_name in k:
+                    k_dst = k.replace(src_name, dst_name)
+                    new_model_state_dict[k_dst] = v
+                    renamed = True
+                    break
+            if not renamed:
+                new_model_state_dict[k] = v
+        model_state_dict = new_model_state_dict
+
+    net.load_state_dict(model_state_dict)
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     if scheduler is not None:
@@ -784,6 +799,9 @@ def get_model(train_options, device):
     elif train_options['model_selection'] in ['UNet_SIR_RFS_MSS']:
         from unet import UNet_SIR_RFS_MSS
         net = UNet_SIR_RFS_MSS(options=train_options).to(device)
+    elif train_options['model_selection'] in ['UNet_regression_SIR_IS2']:
+        from unet import UNet_regression_SIR_IS2
+        net = UNet_regression_SIR_IS2(options=train_options).to(device)
     else:
         raise 'Unknown model selected'
     return net

@@ -19,15 +19,48 @@ import re
 from tqdm import tqdm
 
 # -- Third-party modules -- #
-import numpy as np
-import torch
-import xarray as xr
-from torch.utils.data import Dataset
-import torchvision.transforms.functional as TF
-from scipy.ndimage import maximum_filter, minimum_filter
+import numpy as np # type: ignore
+import torch # type: ignore
+import xarray as xr # type: ignore
+from torch.utils.data import Dataset # type: ignore
+import torchvision.transforms.functional as TF # type: ignore
+from scipy.ndimage import maximum_filter, minimum_filter # type: ignore
 
 # -- Proprietary modules -- #
 from functions import rand_bbox, fill_gaps
+
+amsr2_dims = ('2km_grid_lines', '2km_grid_samples')
+sar_size_dims = ("sar_lines", "sar_samples")
+
+def load_netcdf(file):
+    try:
+        scene = xr.open_dataset(file, engine='h5netcdf')
+    except Exception as inst:
+        print(file)    # the exception type
+        print(type(inst))    # the exception type
+        print(inst.args)     # arguments stored in .args
+        print(inst)
+        return None
+    return scene
+
+def load_npz(file):
+    try:
+        with np.load(file) as ds:
+            scene_dict = {}
+            for name in ds.files:
+                if name.startswith('btemp_'):
+                    scene_dict[name] = (amsr2_dims, ds[name])
+                else:
+                    scene_dict[name] = (sar_size_dims, ds[name])
+            scene = xr.Dataset(scene_dict)
+    except Exception as inst:
+        print(file)    # the exception type
+        print(type(inst))    # the exception type
+        print(inst.args)     # arguments stored in .args
+        print(inst)
+        return None
+    return scene
+
 
 class AI4ArcticChallengeDataset(Dataset):
     """Pytorch dataset for loading batches of patches of scenes from the ASID
@@ -49,15 +82,13 @@ class AI4ArcticChallengeDataset(Dataset):
             self.scenes = []
             self.amsrs = []
             self.aux = []
-            # self.files = self.files[:30]
             for file in tqdm(self.files):
-                try:
-                    scene = xr.open_dataset(os.path.join(self.options['path_to_train_data'], file), engine='h5netcdf')
-                except Exception as inst:
-                    print(file)    # the exception type
-                    print(type(inst))    # the exception type
-                    print(inst.args)     # arguments stored in .args
-                    print(inst)
+                filepath = os.path.join(self.options['path_to_train_data'], file)
+                if filepath.endswith('.npz'):
+                    scene = load_npz(filepath)
+                else:
+                    scene = load_netcdf(filepath)
+                if scene is None:
                     continue
 
                 try:
@@ -601,6 +632,8 @@ class AI4ArcticChallengeTestDataset(Dataset):
         self.data = []
         for i, ifile in enumerate(tqdm(self.files)):
             x, y, cfv_masks, tfv_mask, name, original_size = self._getitem_old(i)
+            if x is None:
+                continue
             self.data.append([x, y, cfv_masks, tfv_mask, name, original_size])
 
     def __getitem__(self, idx):
@@ -747,11 +780,16 @@ class AI4ArcticChallengeTestDataset(Dataset):
 
         """
         if self.mode == 'test' or  self.mode == 'test_no_gt':
-            scene = xr.open_dataset(os.path.join(
-                self.options['path_to_test_data'], self.files[idx]), engine='h5netcdf')
+            filepath = os.path.join(self.options['path_to_test_data'], self.files[idx])
         elif self.mode == 'train':
-            scene = xr.open_dataset(os.path.join(
-                self.options['path_to_train_data'], self.files[idx]), engine='h5netcdf')
+            filepath = os.path.join(self.options['path_to_train_data'], self.files[idx])
+
+        if filepath.endswith('.npz'):
+            scene = load_npz(filepath)
+        elif filepath.endswith('.nc'):
+            scene = load_netcdf(filepath)
+        if scene is None:
+            return None, None, None, None, None, None
 
         x, y = self.prep_scene(scene)
         name = self.files[idx]
