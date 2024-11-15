@@ -217,11 +217,9 @@ class UNet_sep_dec(torch.nn.Module):
 
         self.sic_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['SIC'])
         self.sod_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['SOD'])
-        self.floe_feature_map = FeatureMap(
-            input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['FLOE'])
+        self.floe_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes']['FLOE'])
 
     def Decoder(self, x_contract):
-
         x_expand = self.bridge(x_contract[-1])
         up_idx = len(x_contract)
         for expand_block in self.expand_blocks:
@@ -692,3 +690,54 @@ class UNet_sep_dec_mse(torch.nn.Module):
 		return {'SIC': self.regression_layer(x_expand_sic.permute(0,2,3,1)),
 				'SOD': self.sod_feature_map(x_expand_sod),
 				'FLOE': self.floe_feature_map(x_expand_floe)}
+
+class UNet_SIR_RFS_MSS(torch.nn.Module):
+    """PyTorch U-Net Class. Uses unet_parts."""
+
+    def __init__(self, options):
+        super().__init__()
+        self.charts = options['charts']
+
+        self.input_block = DoubleConv(options, input_n=len(options['train_variables']),
+                                      output_n=options['unet_conv_filters'][0])
+
+        self.contract_blocks = torch.nn.ModuleList()
+        for contract_n in range(1, len(options['unet_conv_filters'])):
+            self.contract_blocks.append(
+                ContractingBlock(options=options,
+                                 input_n=options['unet_conv_filters'][contract_n - 1],
+                                 output_n=options['unet_conv_filters'][contract_n]))
+            if 'dropout_rate' in options:
+                self.dropout = nn.Dropout2d(p=options['dropout_rate'])
+            # only used to contract input patch.
+
+        self.bridge = ContractingBlock(
+            options, input_n=options['unet_conv_filters'][-1], output_n=options['unet_conv_filters'][-1])
+
+        self.expand_blocks = torch.nn.ModuleList()
+        self.expand_blocks.append(
+            ExpandingBlock(options=options, input_n=options['unet_conv_filters'][-1],
+                           output_n=options['unet_conv_filters'][-1]))
+
+        for expand_n in range(len(options['unet_conv_filters']), 1, -1):
+            self.expand_blocks.append(ExpandingBlock(options=options,
+                                                     input_n=options['unet_conv_filters'][expand_n - 1],
+                                                     output_n=options['unet_conv_filters'][expand_n - 2]))
+        for chart in self.charts:
+            self.add_module(f'output_{chart}', FeatureMap(input_n=options['unet_conv_filters'][0], output_n=options['n_classes'][chart]))
+
+    def forward(self, x):
+        """Forward model pass."""
+        x_contract = [self.input_block(x)]
+        for contract_block in self.contract_blocks:
+            x_contract.append(contract_block(x_contract[-1]))
+        x_expand = self.bridge(x_contract[-1])
+        up_idx = len(x_contract)
+        for expand_block in self.expand_blocks:
+            x_expand = expand_block(x_expand, x_contract[up_idx - 1])
+            up_idx -= 1
+
+        return {
+            chart: self.get_submodule(f'output_{chart}')(x_expand)
+            for chart in self.charts
+        }

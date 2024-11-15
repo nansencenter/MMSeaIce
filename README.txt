@@ -20,7 +20,11 @@ Exclude some classes from training (update loader and config; or exclude extreme
 
 Merge some classes (update loader) or map classes to other SOD classes that were trained well
 
-How much random rotation affects training
+How much random rotation affects training.
+
+Use MSE metrics and train on raw SIR, RFS
+
+Use equal size clustering to normalize sampling
 
 
 # Plan
@@ -52,12 +56,12 @@ model _02g failed to train. Probably bug in computing loss function when more cl
 
 model _02c1 is trained from scratch. Wandb project _02c is reused but workdirs _02c1 is created. Doesn't train as good as starting from _01c.
 
-model _02c2 is trained from _01c with scenes with dT = 10 min. Score is a bit lower. Validation loss is MUCH large.
+model _02c2 is trained from _01c with scenes with dT = 10 min. Score is a bit lower. Validation loss is MUCH larger.
 Individual scores are about the same. Lower for class 0, higher for some other classes. No improvement.
 
 models _02c3 and _02c4 are started from _01c with smaller and larger SIR footprint. Smaller footprint seemly gives better results.
 
-models _01d and _01e are trained from scratch of SID,SOD,FLZ with downsample=1. _01d has same AMSR2 bands as _01c; _01d has all AMSR2 bands.
+models _01d and _01e are trained from scratch of SID,SOD,FLZ with downsample=1. _01d has same AMSR2 bands as _01c; _01e has all AMSR2 bands.
 Scores are about the same in 1d/1e as in 1c. Strange that highest score is for class 0. Does it return just zeros everywhere?
 
 models _04c1 and _04c2 are started from _01d and 01e with same params but for SIR02
@@ -69,4 +73,7 @@ NB!
 0th class is terribly oversmapled in ready_to_train (WATER) and in new_to_train (flat ice?)
 So classification simply returns 0s everywhere in _1c- based models. That's how the score gets so high in 01c, and children.
 
-_01f and _01g EXCLUDE class 0. _01g does not randomly rotate.
+Runs _01f and _01g EXCLUDE class 0. _01g does not randomly rotate.
+Result - a bit better for class 10. Terrible for other classes.
+
+Can we use transfer learning with bad model performance on ASIP data?!?!?!?!

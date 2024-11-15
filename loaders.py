@@ -74,6 +74,13 @@ class AI4ArcticChallengeDataset(Dataset):
                         if key in self.options['mask_classes']:
                             temp_scene[i] = np.where(temp_scene[i] == self.options['mask_classes'][key], 255, temp_scene[i])
 
+                if 'join_classes' in self.options:
+                    for i, chart in enumerate(self.options['join_classes']):
+                        temp_scene_i = np.zeros(temp_scene[i].shape, np.uint8) + np.uint8(255)
+                        for new_class in self.options['join_classes'][chart]:
+                            temp_scene_i[np.isin(temp_scene[i], self.options['join_classes'][chart][new_class])] = new_class
+                        temp_scene[i] = temp_scene_i
+
                 if 'change_SIR_footprint' in self.options:
                     mask = temp_scene[0] == 255
                     if self.options['change_SIR_footprint'] < 0:
@@ -711,8 +718,12 @@ class AI4ArcticChallengeTestDataset(Dataset):
             for idx, chart in enumerate(self.options['charts']):
                 y[chart] = y_charts[:, idx].squeeze().numpy()
 
-            # y = {
-            #     chart: scene[chart].values   for chart in self.options['charts']}
+            if 'join_classes' in self.options:
+                for chart in self.options['join_classes']:
+                    y_chart = np.zeros(y[chart].shape, np.uint8) + np.uint8(255)
+                    for new_class in self.options['join_classes'][chart]:
+                        y_chart[np.isin(y[chart], self.options['join_classes'][chart][new_class])] = new_class
+                    y[chart] = y_chart
 
         else:
             y = None

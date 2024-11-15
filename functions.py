@@ -781,6 +781,9 @@ def get_model(train_options, device):
     elif train_options['model_selection'] in ['unet_regression_sir']:
         from unet import UNet_regression_SIR
         net = UNet_regression_SIR(options=train_options).to(device)
+    elif train_options['model_selection'] in ['UNet_SIR_RFS_MSS']:
+        from unet import UNet_SIR_RFS_MSS
+        net = UNet_SIR_RFS_MSS(options=train_options).to(device)
     else:
         raise 'Unknown model selected'
     return net
