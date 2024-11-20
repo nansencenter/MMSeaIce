@@ -78,8 +78,11 @@ def compute_metrics(true, pred, charts, metrics, num_classes):
     scores = {}
     for chart in charts:
         if true[chart].ndim == 1 and pred[chart].ndim == 1:
-            scores[chart] = torch.round(metrics[chart]['func'](
-                true=true[chart], pred=pred[chart], num_classes=num_classes[chart]) * 100, decimals=3)
+            if true[chart].size(dim=0) == 0:
+                scores[chart] = 0
+            else:
+                scores[chart] = torch.round(metrics[chart]['func'](
+                    true=true[chart], pred=pred[chart], num_classes=num_classes[chart]) * 100, decimals=3)
 
         else:
             print(f"true and pred must be 1D numpy array, got {true['SIC'].ndim} \
@@ -187,8 +190,8 @@ def compute_combined_score(scores, charts, metrics):
         The combined weighted score.
 
     """
-    combined_metric = 0
-    sum_weight = 0
+    combined_metric = 0.
+    sum_weight = 0.
     for chart in charts:
         combined_metric += scores[chart] * metrics[chart]['weight']
         sum_weight += metrics[chart]['weight']

@@ -141,34 +141,31 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             # - Ensures that no gradients are calculated, which otherwise take up a lot of space on the GPU.
             with torch.no_grad(), torch.amp.autocast('cuda'):
                 inf_x = inf_x.to(device, non_blocking=True)
+                for chart in train_options['charts']:
+                    inf_y[chart] = inf_y[chart].to(device)
+                    cfv_masks[chart] = cfv_masks[chart].to(device)
                 if train_options['model_selection'] == 'swin':
                     output = slide_inference(inf_x, net, train_options, 'val')
                     # output = batched_slide_inference(inf_x, net, train_options, 'val')
                 else:
                     output = net(inf_x)
-
+                nan_loss = False
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-                    # SIR
-                    if 'SIR' in train_options['charts'][0]:
-                        val_loss_batch += weight * loss_ce_functions[chart](
-                            output[chart][:,:,~cfv_masks[chart]],
-                            inf_y[chart][~cfv_masks[chart]].unsqueeze(0).long().to(device)
-                        )
+                    gpi = torch.isfinite(output[chart].squeeze())
+                    _loss = loss_ce_functions[chart](output[chart].squeeze()[gpi], inf_y[chart].squeeze()[gpi])
+                    if torch.isnan(_loss):
+                        nan_loss = True
                     else:
-                        val_loss_batch += weight * loss_ce_functions[chart](
-                            output[chart],
-                            inf_y[chart].unsqueeze(0).long().to(device)
-                        )
+                        val_loss_batch += weight * _loss
 
-            # - Final output layer, and storing of non masked pixels.
-            for chart in train_options['charts']:
-                # TODO:
-                # use class decider of output is classification, not regression
-                #output[chart] = class_decider(output[chart], train_options, chart)
-                outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart].squeeze()[~cfv_masks[chart].squeeze()]))
-                inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y[chart][~cfv_masks[chart]].to(device, non_blocking=True)))
-            # - Add batch loss.
-            val_loss_sum += val_loss_batch.detach().item()
+            if not nan_loss:
+                for chart in train_options['charts']:
+                    gpi = ~cfv_masks[chart].squeeze() * torch.isfinite(output[chart].squeeze())
+                    outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart].squeeze()[gpi]))
+                    inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y[chart].squeeze()[gpi]))
+
+                # - Add batch loss.
+                val_loss_sum += val_loss_batch.detach().item()
 
         # - Average loss for displaying
         val_loss_epoch = torch.true_divide(val_loss_sum, i + 1).detach().item()
@@ -177,6 +174,9 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
         print('Computing Metrics on Val dataset')
         combined_score, scores = compute_metrics(true=inf_ys_flat, pred=outputs_flat, charts=train_options['charts'],
                                                     metrics=train_options['chart_metric'], num_classes=train_options['n_classes'])
+        for chart in train_options['charts']:
+            if torch.isnan(scores[chart]):
+                import ipdb; ipdb.set_trace()
 
         if train_options['compute_classwise_f1score']:
             from functions import compute_classwise_f1score
