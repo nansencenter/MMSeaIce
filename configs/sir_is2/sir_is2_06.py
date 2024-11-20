@@ -87,28 +87,28 @@ train_options = {
     'train_list_path': 'datalists/ntt5_trn.json',
     # Which validation set is going to be used
     'val_path': 'datalists/ntt5_val.json',
-    'task_weights': [1, 0.1],
-    'charts': ['sir_1000ms_seg', 'sir_1000ms_reg'],
+    'task_weights': [1, 0.01],
+    'charts': ['sir_4000ms_seg', 'sir_4000ms_reg'],
     'chart_loss': {  # Loss for the task
-        'sir_1000ms_seg': {
+        'sir_4000ms_seg': {
             'type': 'MSELossWithIgnoreIndex',
             'ignore_index': 255,
         },
-        'sir_1000ms_reg': {
+        'sir_4000ms_reg': {
             'type': 'MSELossWithIgnoreIndex',
             'ignore_index': 255,
         },
     },
     'n_classes': {  # number of total classes in the reference charts, including the mask.
-        'sir_1000ms_seg': 254,
-        'sir_1000ms_reg': 254,
+        'sir_4000ms_seg': 254,
+        'sir_4000ms_reg': 254,
     },
     'class_fill_values': {  # Mask value for class/reference data.
-        'sir_1000ms_seg': 255,
-        'sir_1000ms_reg': 255,
+        'sir_4000ms_seg': 255,
+        'sir_4000ms_reg': 255,
     },
     'chart_metric': {  # Metric functions for each ice parameter and the associated weight.
-        'sir_1000ms_seg': {'func': r2_metric, 'weight': 1},
-        'sir_1000ms_reg': {'func': r2_metric, 'weight': 1},
+        'sir_4000ms_seg': {'func': r2_metric, 'weight': 1},
+        'sir_4000ms_reg': {'func': r2_metric, 'weight': 1},
     },
 }
