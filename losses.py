@@ -107,9 +107,9 @@ class MSELossWithIgnoreIndex(nn.MSELoss):
         return loss
 
 # only applicable to regression outputs
-class MSELossWithIgnoreIndex(nn.MSELoss):
+class MAELossWithIgnoreIndex(nn.L1Loss):
     def __init__(self, ignore_index=255, reduction='mean'):
-        super(MSELossWithIgnoreIndex, self).__init__(reduction=reduction)
+        super(MAELossWithIgnoreIndex, self).__init__(reduction=reduction)
         self.ignore_index = ignore_index
 
     def forward(self, input, target):

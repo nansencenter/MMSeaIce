@@ -125,8 +125,8 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
         # For printing after the validation loop.
 
         # - Stores the output and the reference pixels to calculate the scores after inference on all the scenes.
-        outputs_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
-        inf_ys_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
+        outputs_flat = {chart: torch.Tensor() for chart in train_options['charts']}
+        inf_ys_flat = {chart: torch.Tensor() for chart in train_options['charts']}
         net.eval()  # Set network to evaluation mode.
         print('Validating...')
         # - Loops though scenes in queue.
@@ -141,24 +141,20 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             # - Ensures that no gradients are calculated, which otherwise take up a lot of space on the GPU.
             with torch.no_grad(), torch.amp.autocast('cuda'):
                 inf_x = inf_x.to(device, non_blocking=True)
-                for chart in train_options['charts']:
-                    inf_y[chart] = inf_y[chart].to(device)
-                    cfv_masks[chart] = cfv_masks[chart].to(device)
-                if train_options['model_selection'] == 'swin':
-                    output = slide_inference(inf_x, net, train_options, 'val')
-                    # output = batched_slide_inference(inf_x, net, train_options, 'val')
-                else:
-                    output = net(inf_x)
+                output = net(inf_x)
                 nan_loss = False
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
                     gpi = torch.isfinite(output[chart].squeeze())
-                    _loss = loss_ce_functions[chart](output[chart].squeeze()[gpi], inf_y[chart].squeeze()[gpi])
+                    _loss = loss_ce_functions[chart](output[chart].squeeze()[gpi], inf_y[chart].squeeze().to(device)[gpi])
                     if torch.isnan(_loss):
                         nan_loss = True
+                        print(f'Nan Loss in {chart} at {name}')
+                        break
                     else:
                         val_loss_batch += weight * _loss
 
             if not nan_loss:
+                output = {i: j.cpu() for (i,j) in output.items()}
                 for chart in train_options['charts']:
                     gpi = ~cfv_masks[chart].squeeze() * torch.isfinite(output[chart].squeeze())
                     outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart].squeeze()[gpi]))

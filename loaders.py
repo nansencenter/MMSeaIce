@@ -876,3 +876,16 @@ def get_norm_month(file_name):
     norm_months = 2*months/11-1
 
     return norm_months
+
+class AI4ArcticChallengeInferenceDataset(AI4ArcticChallengeTestDataset):
+    def __init__(self, options, files, mode='test'):
+        self.options = options
+        self.files = files
+
+        # if mode not in ["train_val", "test_val", "test"]:
+        if mode not in ["train", "test", "test_no_gt"]:
+            raise ValueError("String variable must be one of 'train', 'test', or 'test_no_gt'")
+        self.mode = mode
+
+    def __getitem__(self, idx):
+        return self._getitem_old(idx)

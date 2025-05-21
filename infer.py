@@ -14,7 +14,7 @@ from tqdm import tqdm  # Progress bar
 from mmcv import Config
 
 from functions import create_train_validation_and_test_scene_list, get_model, load_model
-from loaders import get_variable_options, AI4ArcticChallengeDataset, AI4ArcticChallengeTestDataset
+from loaders import get_variable_options, AI4ArcticChallengeInferenceDataset
 from utils import colour_str
 
 
@@ -64,7 +64,23 @@ def main():
     if train_options['compile_model']:
         net = torch.compile(net)
     _ = load_model(net, args.cnn_path)
-    print(net)
+    net.eval()
+    files = train_options['validate_list'] + train_options['train_list']
+    dataset_val = AI4ArcticChallengeInferenceDataset(options=train_options, files=files, mode='train')
+
+    dataloader_val = torch.utils.data.DataLoader(
+        dataset_val, batch_size=None, num_workers=train_options['num_workers_val'], shuffle=False)
+
+    print('Inference dataset length: ', len(dataset_val))
+
+    for i, (inf_x, inf_y, cfv_masks, tfv_mask, name, original_size) in enumerate(tqdm(iterable=dataloader_val,
+                                                                        total=len(train_options['validate_list']),
+                                                                        colour='green')):
+        inf_x = inf_x.to(device, non_blocking=True)
+        output = net(inf_x)
+        output = {i: j.detach().cpu().numpy()[0,:,:,0] for (i,j) in output.items()}
+        ofilename = f'{args.out_dir}/{name}_output.npz'
+        np.savez(ofilename, **output)
 
 if __name__ == '__main__':
     main()

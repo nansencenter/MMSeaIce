@@ -79,7 +79,7 @@ def compute_metrics(true, pred, charts, metrics, num_classes):
     for chart in charts:
         if true[chart].ndim == 1 and pred[chart].ndim == 1:
             if true[chart].size(dim=0) == 0:
-                scores[chart] = 0
+                scores[chart] = torch.tensor(0.)
             else:
                 scores[chart] = torch.round(metrics[chart]['func'](
                     true=true[chart], pred=pred[chart], num_classes=num_classes[chart]) * 100, decimals=3)
@@ -88,9 +88,9 @@ def compute_metrics(true, pred, charts, metrics, num_classes):
             print(f"true and pred must be 1D numpy array, got {true['SIC'].ndim} \
                 and {pred['SIC'].ndim} dimensions with shape {true['SIC'].shape} and {pred.shape}, respectively")
 
-    combined_score = compute_combined_score(scores=scores, charts=charts, metrics=metrics)
+    #combined_score = compute_combined_score(scores=scores, charts=charts, metrics=metrics)
 
-    return combined_score, scores
+    return 0, scores
 
 
 def r2_metric(true, pred, num_classes=None):
@@ -765,6 +765,10 @@ def get_loss(loss, chart=None, **kwargs):
         from losses import MSELossWithIgnoreIndex
         kwargs.pop('type')
         loss = MSELossWithIgnoreIndex(**kwargs)
+    elif loss == 'MAELossWithIgnoreIndex':
+        from losses import MAELossWithIgnoreIndex
+        kwargs.pop('type')
+        loss = MAELossWithIgnoreIndex(**kwargs)
     else:
         raise ValueError(f'The given loss \'{loss}\' is unrecognized or Not implemented')
 
