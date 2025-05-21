@@ -11,7 +11,7 @@ import warnings
 import numpy as np
 import torch
 from tqdm import tqdm  # Progress bar
-from mmcv import Config
+from mmengine.config import Config
 
 from functions import create_train_validation_and_test_scene_list, get_model, load_model
 from loaders import get_variable_options, AI4ArcticChallengeInferenceDataset
@@ -59,6 +59,13 @@ def main():
 
         # Setup device to be used
         device = torch.device(f"cuda:{train_options['gpu_id']}")
+    elif torch.mps.is_available():
+        print(colour_str('MPS available!', 'green'))
+        device = torch.device("mps")
+    else:
+        print(colour_str('No GPU available!', 'red'))
+        device = torch.device("cpu")
+    print(colour_str('Using device: ', 'blue'), device)
 
     net = get_model(train_options, device)
     if train_options['compile_model']:

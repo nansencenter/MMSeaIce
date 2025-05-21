@@ -24,7 +24,7 @@ import torch.utils.data as data # type: ignore
 # from sklearn.metrics import r2_score, f1_score
 from torchmetrics.functional import r2_score, f1_score # type: ignore
 import segmentation_models_pytorch as smp # type: ignore
-from tqdm import tqdm  # Progress bar
+#from tqdm import tqdm  # Progress bar
 # -- Proprietary modules -- #
 
 from utils import ICE_STRINGS, GROUP_NAMES
